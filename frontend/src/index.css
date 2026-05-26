@@ -1,0 +1,270 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+	color: #0f172a;
+	background:
+		radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 28%),
+		radial-gradient(circle at top right, rgba(125, 211, 252, 0.16), transparent 22%),
+		radial-gradient(circle at bottom left, rgba(148, 163, 184, 0.12), transparent 24%),
+		linear-gradient(180deg, #fbfdff 0%, #f1f6fb 48%, #f7f9fc 100%);
+}
+
+body {
+	margin: 0;
+	min-width: 320px;
+	font-family: 'Manrope', sans-serif;
+	color: #0f172a;
+	background: transparent;
+}
+
+#root {
+	min-height: 100vh;
+}
+
+.analytics-workspace {
+	--analytics-surface: linear-gradient(160deg, rgba(14, 21, 43, 0.96) 0%, rgba(8, 14, 31, 0.98) 100%);
+	--analytics-surface-soft: linear-gradient(160deg, rgba(23, 31, 58, 0.94) 0%, rgba(12, 19, 38, 0.96) 100%);
+	--analytics-border: rgba(129, 140, 248, 0.22);
+	--analytics-border-strong: rgba(129, 140, 248, 0.34);
+	--analytics-text: #f8fafc;
+	--analytics-muted: #a3b2d1;
+	--analytics-accent: #5b61f2;
+	--analytics-accent-strong: #4f46e5;
+	--analytics-input-bg: rgba(20, 28, 51, 0.92);
+	--analytics-chip-bg: rgba(36, 46, 78, 0.82);
+	--analytics-shadow: 0 32px 100px -58px rgba(7, 10, 24, 0.98);
+	font-size: 0.97rem;
+}
+
+.analytics-shell {
+	--analytics-header-surface: rgba(16, 24, 46, 0.82);
+	--analytics-header-border: rgba(129, 140, 248, 0.24);
+}
+
+.analytics-workspace section,
+.analytics-workspace article,
+.analytics-workspace aside > section {
+	background: var(--analytics-surface);
+	border-color: var(--analytics-border) !important;
+	box-shadow: var(--analytics-shadow);
+	backdrop-filter: blur(4px);
+}
+
+.analytics-workspace [class*='rounded-[30px]'],
+.analytics-workspace [class*='rounded-[32px]'] {
+	border-radius: 22px !important;
+}
+
+.analytics-workspace [class*='rounded-[28px]'],
+.analytics-workspace [class*='rounded-[26px]'] {
+	border-radius: 20px !important;
+}
+
+.analytics-workspace [class*='rounded-[24px]'],
+.analytics-workspace [class*='rounded-[22px]'],
+.analytics-workspace [class*='rounded-2xl'] {
+	border-radius: 16px !important;
+}
+
+.analytics-workspace [class*='bg-slate-50'],
+.analytics-workspace [class*='bg-sky-50'],
+.analytics-workspace [class*='bg-white'] {
+	background: var(--analytics-surface-soft) !important;
+	border-color: rgba(129, 140, 248, 0.22) !important;
+}
+
+.analytics-workspace [class*='from-sky-50'],
+.analytics-workspace [class*='to-blue-50'] {
+	background: var(--analytics-surface-soft) !important;
+	background-image: linear-gradient(145deg, rgba(35, 46, 78, 0.92), rgba(19, 28, 52, 0.96)) !important;
+}
+
+.analytics-workspace [class*='bg-[linear-gradient(180deg,rgba(248,250,252'],
+.analytics-workspace [class*='bg-[linear-gradient(180deg,rgba(241,245,249'],
+.analytics-workspace [class*='bg-[linear-gradient(180deg,rgba(240,249,255'],
+.analytics-workspace [class*='bg-[linear-gradient(180deg,rgba(239,246,255'] {
+	background-image: linear-gradient(175deg, rgba(38, 47, 82, 0.86), rgba(17, 26, 47, 0.96)) !important;
+	background-color: rgba(21, 30, 54, 0.9) !important;
+	border-color: rgba(129, 140, 248, 0.24) !important;
+}
+
+.analytics-workspace .analytics-featured-plan {
+	border-color: rgba(129, 140, 248, 0.34) !important;
+	background-image: linear-gradient(145deg, rgba(47, 56, 94, 0.95), rgba(23, 31, 58, 0.98)) !important;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 26px 55px -40px rgba(5, 8, 24, 0.95);
+}
+
+.analytics-workspace .analytics-pill {
+	background: rgba(34, 46, 84, 0.9) !important;
+	color: #c7d2fe !important;
+	border: 1px solid rgba(129, 140, 248, 0.3);
+}
+
+.analytics-workspace [class*='bg-white/[0.03]'],
+.analytics-workspace [class*='bg-white/[0.04]'],
+.analytics-workspace [class*='bg-white/[0.05]'] {
+	background: rgba(35, 44, 74, 0.62) !important;
+	border-color: rgba(129, 140, 248, 0.26) !important;
+}
+
+.analytics-workspace [class*='text-slate-950'],
+.analytics-workspace [class*='text-slate-900'],
+.analytics-workspace [class*='text-slate-800'] {
+	color: var(--analytics-text) !important;
+}
+
+.analytics-workspace [class*='text-slate-700'],
+.analytics-workspace [class*='text-slate-600'],
+.analytics-workspace [class*='text-slate-500'],
+.analytics-workspace [class*='text-slate-400'] {
+	color: var(--analytics-muted) !important;
+}
+
+.analytics-workspace [class*='text-sky-700'],
+.analytics-workspace [class*='text-sky-600'] {
+	color: #a5b4fc !important;
+}
+
+.analytics-workspace [class*='bg-sky-600'] {
+	background: linear-gradient(120deg, var(--analytics-accent) 0%, var(--analytics-accent-strong) 100%) !important;
+	color: #fff !important;
+	border-color: transparent !important;
+	box-shadow: 0 22px 44px -28px rgba(79, 70, 229, 0.95);
+}
+
+.analytics-workspace [class*='hover:bg-sky-700']:hover {
+	background: linear-gradient(120deg, #818cf8 0%, #6366f1 100%) !important;
+}
+
+.analytics-workspace [class*='hover:bg-white']:hover,
+.analytics-workspace [class*='hover:bg-slate-50']:hover {
+	background: rgba(74, 86, 134, 0.48) !important;
+	color: #e2e8f0 !important;
+}
+
+.analytics-workspace [class*='bg-emerald-50'],
+.analytics-workspace [class*='bg-emerald-100'] {
+	background: rgba(16, 185, 129, 0.18) !important;
+	color: #6ee7b7 !important;
+	border-color: rgba(52, 211, 153, 0.34) !important;
+}
+
+.analytics-workspace [class*='bg-amber-50'],
+.analytics-workspace [class*='bg-amber-100'] {
+	background: rgba(245, 158, 11, 0.18) !important;
+	color: #fcd34d !important;
+	border-color: rgba(251, 191, 36, 0.34) !important;
+}
+
+.analytics-workspace [class*='bg-violet-50'],
+.analytics-workspace [class*='bg-violet-100'],
+.analytics-workspace [class*='bg-sky-100'],
+.analytics-workspace [class*='bg-slate-100'],
+.analytics-workspace [class*='bg-slate-200'] {
+	background: rgba(70, 85, 130, 0.45) !important;
+	color: #c7d2fe !important;
+	border-color: rgba(129, 140, 248, 0.28) !important;
+}
+
+.analytics-workspace [class*='border-emerald-200'],
+.analytics-workspace [class*='border-amber-200'],
+.analytics-workspace [class*='border-sky-200'],
+.analytics-workspace [class*='border-violet-200'] {
+	border-color: rgba(129, 140, 248, 0.28) !important;
+}
+
+.analytics-workspace input,
+.analytics-workspace select,
+.analytics-workspace textarea {
+	background: var(--analytics-input-bg) !important;
+	color: var(--analytics-text) !important;
+	border-color: rgba(129, 140, 248, 0.26) !important;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.analytics-workspace input::placeholder,
+.analytics-workspace textarea::placeholder {
+	color: #7f8fb2 !important;
+}
+
+.analytics-workspace button,
+.analytics-workspace a[class*='rounded'],
+.analytics-workspace summary {
+	transition: all 170ms ease;
+}
+
+.analytics-workspace button:hover,
+.analytics-workspace a[class*='rounded']:hover {
+	border-color: var(--analytics-border-strong) !important;
+	transform: translateY(-1px);
+}
+
+.analytics-workspace [class*='rounded-full'] {
+	background: var(--analytics-chip-bg);
+	border-color: rgba(129, 140, 248, 0.24) !important;
+}
+
+.analytics-workspace [class*='uppercase tracking'] {
+	letter-spacing: 0.14em !important;
+}
+
+.sparkline-anim-line {
+	stroke-dasharray: 220;
+	stroke-dashoffset: 220;
+	animation: sparkline-draw 800ms cubic-bezier(0.21, 0.8, 0.32, 1) forwards;
+}
+
+.sparkline-anim-area {
+	opacity: 0;
+	animation: sparkline-fade 450ms ease forwards;
+	animation-delay: 180ms;
+}
+
+.sparkline-anim-dot {
+	opacity: 0;
+	transform-origin: center;
+	animation: sparkline-pop 300ms ease forwards;
+	animation-delay: 440ms;
+}
+
+@keyframes sparkline-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+
+@keyframes sparkline-fade {
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes sparkline-pop {
+	from {
+		opacity: 0;
+		transform: scale(0.85);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sparkline-anim-line,
+	.sparkline-anim-area,
+	.sparkline-anim-dot {
+		animation: none !important;
+		opacity: 1;
+	}
+}
+
+.analytics-workspace [class*='focus:border-sky-500']:focus,
+.analytics-workspace [class*='focus:border-sky-500']:focus-visible {
+	border-color: #818cf8 !important;
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
