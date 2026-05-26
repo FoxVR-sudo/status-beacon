@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
@@ -13,6 +15,7 @@ from app.api.deps import get_current_user
 from app.services.billing import get_current_monitor_limit, get_current_plan_id
 from app.services.traffic import ensure_traffic_config, latest_traffic_sample, serialize_traffic_snapshot
 from app.services.performance_budgets import DEFAULT_PERFORMANCE_BUDGETS
+from app.services.tls_baseline import annotate_tls_report, build_tls_baseline_snapshot
 
 router = APIRouter(prefix="/api/websites", tags=["websites"])
 _UNSET = object()
@@ -199,6 +202,10 @@ async def update_website(
     for field, value in payload.items():
         setattr(website, field, str(value) if field == "url" and value is not None else value)
 
+    if "url" in changed_fields and payload.get("url") is not None:
+        website.tls_baseline = None
+        website.tls_baseline_approved_at = None
+
     await db.commit()
     await db.refresh(website)
 
@@ -221,6 +228,62 @@ async def update_website(
     return response
 
 
+@router.post("/{website_id}/tls-baseline/approve", response_model=WebsiteResponse)
+async def approve_tls_baseline(
+    website_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.alert import Alert as AlertModel
+
+    result = await db.execute(
+        select(Website).where(Website.id == website_id, Website.user_id == current_user.id)
+    )
+    website = result.scalar_one_or_none()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    latest_result = await db.execute(
+        select(Check)
+        .where(Check.website_id == website.id)
+        .order_by(Check.checked_at.desc())
+        .limit(1)
+    )
+    latest_check = latest_result.scalar_one_or_none()
+    tls_baseline = build_tls_baseline_snapshot(latest_check.tls_report if latest_check else None)
+    if tls_baseline is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Run a successful HTTPS check first so there is a trusted TLS certificate to approve.",
+        )
+
+    website.tls_baseline = tls_baseline
+    website.tls_baseline_approved_at = datetime.now(timezone.utc)
+    db.add(
+        AlertModel(
+            website_id=website.id,
+            type="tls_baseline_approved",
+            message=(
+                f"TLS baseline approved for {website.name}. "
+                "The current certificate and public key are now trusted for future identity change detection."
+            ),
+        )
+    )
+
+    await db.commit()
+    await db.refresh(website)
+
+    traffic_config = await ensure_traffic_config(db, website.id)
+    traffic_sample = await latest_traffic_sample(db, website.id)
+
+    response = WebsiteResponse.model_validate(website)
+    if response.performance_budgets is None:
+        response.performance_budgets = DEFAULT_PERFORMANCE_BUDGETS.copy()
+    for field, value in serialize_traffic_snapshot(traffic_config, traffic_sample).items():
+        setattr(response, field, value)
+    return response
+
+
 @router.get("/{website_id}/checks", response_model=List[CheckResponse])
 async def get_checks(
     website_id: int,
@@ -230,7 +293,8 @@ async def get_checks(
     result = await db.execute(
         select(Website).where(Website.id == website_id, Website.user_id == current_user.id)
     )
-    if not result.scalar_one_or_none():
+    website = result.scalar_one_or_none()
+    if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
     checks_result = await db.execute(
@@ -239,7 +303,14 @@ async def get_checks(
         .order_by(Check.checked_at.desc())
         .limit(50)
     )
-    return checks_result.scalars().all()
+    checks = checks_result.scalars().all()
+    for check in checks:
+        check.tls_report = annotate_tls_report(
+            check.tls_report,
+            website.tls_baseline,
+            website.tls_baseline_approved_at,
+        )
+    return checks
 
 
 @router.post("/{website_id}/check", status_code=202)

@@ -44,6 +44,9 @@ export const websitesApi = {
   getChecks: (id: number) =>
     client.get<Check[]>(`/api/websites/${id}/checks`).then((r) => r.data),
 
+  approveTlsBaseline: (id: number) =>
+    client.post<Website>(`/api/websites/${id}/tls-baseline/approve`).then((r) => r.data),
+
   triggerCheck: (id: number) =>
     client.post(`/api/websites/${id}/check`).then((r) => r.data),
 }

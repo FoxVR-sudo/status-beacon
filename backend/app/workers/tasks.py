@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.workers.celery_app import celery_app
 from app.database import AsyncSessionLocal
+from app.services.tls_baseline import annotate_tls_report
 
 
 def _utc(dt: datetime) -> datetime:
@@ -95,7 +96,11 @@ async def _run_check(website_id: int, force: bool = False):
             performance_budgets=website.performance_budgets,
         )
         data["screenshot_report"] = _build_screenshot_report(data, render_state)
-        _annotate_tls_report(data, previous_check)
+        data["tls_report"] = annotate_tls_report(
+            data.get("tls_report"),
+            website.tls_baseline,
+            website.tls_baseline_approved_at,
+        )
 
         check = Check(
             website_id=website.id,
@@ -201,22 +206,6 @@ def _issue_present(report: dict | None, issue: str) -> bool:
 
     issues = report.get("issues")
     return isinstance(issues, list) and issue in issues
-
-
-def _annotate_tls_report(data: dict, previous_check) -> None:
-    report = data.get("tls_report")
-    if not isinstance(report, dict) or not report.get("applicable") or not report.get("valid"):
-        return
-
-    previous_report = previous_check.tls_report if previous_check else None
-    previous_cert = previous_report.get("certificate_sha256") if isinstance(previous_report, dict) else None
-    previous_pin = previous_report.get("public_key_pin_sha256") if isinstance(previous_report, dict) else None
-    current_cert = report.get("certificate_sha256")
-    current_pin = report.get("public_key_pin_sha256")
-
-    report["baseline_available"] = bool(previous_cert or previous_pin)
-    report["changed_certificate"] = bool(previous_cert and current_cert and previous_cert != current_cert)
-    report["changed_public_key"] = bool(previous_pin and current_pin and previous_pin != current_pin)
 
 
 def _build_alerts(website, data: dict, previous_check, render_state) -> list[dict]:

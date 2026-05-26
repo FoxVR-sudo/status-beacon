@@ -36,6 +36,8 @@ async def _ensure_runtime_schema(conn) -> None:
     await conn.execute(text("ALTER TABLE websites ADD COLUMN IF NOT EXISTS basic_auth_password VARCHAR NULL"))
     await conn.execute(text("ALTER TABLE websites ADD COLUMN IF NOT EXISTS check_noscript BOOLEAN NOT NULL DEFAULT false"))
     await conn.execute(text("ALTER TABLE websites ADD COLUMN IF NOT EXISTS performance_budgets JSON NULL"))
+    await conn.execute(text("ALTER TABLE websites ADD COLUMN IF NOT EXISTS tls_baseline JSON NULL"))
+    await conn.execute(text("ALTER TABLE websites ADD COLUMN IF NOT EXISTS tls_baseline_approved_at TIMESTAMPTZ NULL"))
     await conn.execute(text("ALTER TABLE checks ADD COLUMN IF NOT EXISTS seo_report JSON NULL"))
     await conn.execute(text("ALTER TABLE checks ADD COLUMN IF NOT EXISTS header_report JSON NULL"))
     await conn.execute(text("ALTER TABLE checks ADD COLUMN IF NOT EXISTS tls_report JSON NULL"))

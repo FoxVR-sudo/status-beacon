@@ -188,6 +188,10 @@ function getTlsStatusMeta(tlsReport: Check['tls_report'] | null) {
     return { label: 'Handshake failed', className: 'bg-rose-100 text-rose-700' }
   }
 
+  if (tlsReport.baseline_pending_approval) {
+    return { label: 'Needs approval', className: 'bg-sky-100 text-sky-700' }
+  }
+
   if (tlsReport.changed_public_key) {
     return { label: 'Key changed', className: 'bg-rose-100 text-rose-700' }
   }
@@ -201,6 +205,23 @@ function getTlsStatusMeta(tlsReport: Check['tls_report'] | null) {
   }
 
   return { label: 'Identity stable', className: 'bg-emerald-100 text-emerald-700' }
+}
+
+function isIncidentAlertType(type: string) {
+  return type !== 'tls_baseline_approved'
+}
+
+function getRequestErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
+  ) {
+    return (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? fallback
+  }
+
+  return fallback
 }
 
 function isHealthyStatus(statusCode: number | null) {
@@ -227,6 +248,8 @@ function normalizeAlertType(value: string) {
       return 'SSL expiry'
     case 'tls_public_key_change':
       return 'TLS identity change'
+    case 'tls_baseline_approved':
+      return 'TLS baseline approved'
     case 'hsts_missing':
       return 'HSTS missing'
     case 'keyword_missing':
@@ -282,7 +305,9 @@ function formatAlertMessage(alert: Alert, websiteName: string) {
       return `${websiteLabel} SSL certificate is approaching expiry. Renew it before browsers start showing certificate warnings.`
     }
     case 'tls_public_key_change':
-      return `${websiteLabel} is presenting a different TLS public key than the previous trusted check. If you did not rotate certificates or change CDN/edge TLS, investigate possible interception or unexpected certificate replacement.`
+      return `${websiteLabel} is presenting a different TLS public key than the approved trusted baseline. If you did not rotate certificates or change CDN/edge TLS, investigate possible interception or unexpected certificate replacement.`
+    case 'tls_baseline_approved':
+      return `${websiteLabel} trusted the currently observed certificate and public key as the approved TLS baseline. Future identity alerts will compare against this accepted state.`
     case 'hsts_missing':
       return `${websiteLabel} serves HTTPS without a Strict-Transport-Security header. Without HSTS, first-visit downgrade and some network interception scenarios are easier.`
     case 'keyword_missing': {
@@ -425,6 +450,8 @@ function resolveAlertLifecycle(
   const currentStatus = getStatusState(latestCheck?.status_code ?? website?.last_status_code ?? null)
 
   switch (alert.type) {
+    case 'tls_baseline_approved':
+      return 'resolved'
     case 'timeout':
       return currentStatus === 'timeout' ? 'open' : currentStatus === 'unknown' ? 'review' : 'resolved'
     case 'error':
@@ -481,6 +508,8 @@ function getAlertSeverity(alert: Alert): PrioritySeverity {
     case 'tls_public_key_change':
     case 'keyword_missing':
       return 'high'
+    case 'tls_baseline_approved':
+      return 'low'
     case 'hsts_missing':
       return 'medium'
     case 'noscript_missing':
@@ -558,7 +587,11 @@ function buildMonitorPriority(
   }
 
   if (latestCheck?.tls_report?.changed_public_key) {
-    applySignal('high', 90, 'TLS identity changed', 'The observed TLS public key no longer matches the previous trusted check.', 'Verify planned certificate rotation or investigate possible interception immediately.')
+    applySignal('high', 90, 'TLS identity changed', 'The observed TLS public key no longer matches the approved trusted baseline.', 'Verify planned certificate rotation or investigate possible interception immediately.')
+  } else if (latestCheck?.tls_report?.changed_certificate) {
+    applySignal('medium', 60, 'TLS certificate rotated', 'The current certificate fingerprint differs from the approved baseline, even though the public key stayed the same.', 'Review the new certificate details and accept the updated baseline if this rotation was planned.')
+  } else if (latestCheck?.tls_report?.baseline_pending_approval) {
+    applySignal('medium', 48, 'Approve the first TLS baseline', 'This monitor has certificate details, but no trusted TLS identity has been approved yet.', 'Review issuer and fingerprints, then approve the current TLS baseline.')
   }
 
   if (latestCheck?.keyword_ok === false) {
@@ -841,6 +874,7 @@ export default function Dashboard() {
   const [runningVisibleChecks, setRunningVisibleChecks] = useState(false)
   const [duplicatingWebsiteId, setDuplicatingWebsiteId] = useState<number | null>(null)
   const [checkingWebsiteId, setCheckingWebsiteId] = useState<number | null>(null)
+  const [approvingTlsBaselineWebsiteId, setApprovingTlsBaselineWebsiteId] = useState<number | null>(null)
   const [togglingWebsiteId, setTogglingWebsiteId] = useState<number | null>(null)
   const [activeMenuWebsiteId, setActiveMenuWebsiteId] = useState<number | null>(null)
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -1099,9 +1133,11 @@ export default function Dashboard() {
     [activeWebsites],
   )
 
+  const incidentAlerts = useMemo(() => alerts.filter((alert) => isIncidentAlertType(alert.type)), [alerts])
+
   const alertTrend = useMemo(
     () =>
-      alerts
+      incidentAlerts
         .slice(0, 12)
         .reverse()
         .map((alert) => {
@@ -1113,11 +1149,11 @@ export default function Dashboard() {
           }
           return 1
         }),
-    [alerts],
+    [incidentAlerts],
   )
 
   const alertMix = useMemo(() => {
-    const counts = alerts.reduce<Record<string, number>>((result, alert) => {
+    const counts = incidentAlerts.reduce<Record<string, number>>((result, alert) => {
       result[alert.type] = (result[alert.type] ?? 0) + 1
       return result
     }, {})
@@ -1125,7 +1161,7 @@ export default function Dashboard() {
     return Object.entries(counts)
       .sort((left, right) => right[1] - left[1])
       .slice(0, 4)
-  }, [alerts])
+  }, [incidentAlerts])
 
   const websiteById = useMemo<Record<number, Website>>(
     () => Object.fromEntries(websites.map((website) => [website.id, website])) as Record<number, Website>,
@@ -1146,14 +1182,14 @@ export default function Dashboard() {
   )
 
   const alertsByWebsite = useMemo(() => {
-    return alerts.reduce<Record<number, Alert[]>>((result, alert) => {
+    return incidentAlerts.reduce<Record<number, Alert[]>>((result, alert) => {
       result[alert.website_id] = [...(result[alert.website_id] ?? []), alert]
       return result
     }, {})
-  }, [alerts])
+  }, [incidentAlerts])
 
   const latestRenderedChangeByWebsite = useMemo(() => {
-    return alerts.reduce<Record<number, Alert>>((result, alert) => {
+    return incidentAlerts.reduce<Record<number, Alert>>((result, alert) => {
       if (alert.type !== 'rendered_change') {
         return result
       }
@@ -1164,7 +1200,7 @@ export default function Dashboard() {
       }
       return result
     }, {})
-  }, [alerts])
+  }, [incidentAlerts])
 
   const alertLifecycleById = useMemo<Record<number, IncidentLifecycle>>(() => {
     return alerts.reduce<Record<number, IncidentLifecycle>>((result, alert) => {
@@ -1193,7 +1229,7 @@ export default function Dashboard() {
   }, [alertLifecycleById, alertsByWebsite])
 
   const incidentCounts = useMemo(() => {
-    return alerts.reduce(
+    return incidentAlerts.reduce(
       (result, alert) => {
         const lifecycle = alertLifecycleById[alert.id] ?? 'review'
         result[lifecycle] += 1
@@ -1201,7 +1237,7 @@ export default function Dashboard() {
       },
       { open: 0, review: 0, resolved: 0 },
     )
-  }, [alertLifecycleById, alerts])
+  }, [alertLifecycleById, incidentAlerts])
 
   const priorityMonitors = useMemo(() => {
     return filteredWebsites
@@ -1221,13 +1257,13 @@ export default function Dashboard() {
   )
 
   const activeAlerts = useMemo(
-    () => alerts.filter((alert) => (alertLifecycleById[alert.id] ?? 'review') !== 'resolved'),
-    [alertLifecycleById, alerts],
+    () => incidentAlerts.filter((alert) => (alertLifecycleById[alert.id] ?? 'review') !== 'resolved'),
+    [alertLifecycleById, incidentAlerts],
   )
 
   const renderedChangeAlerts = useMemo(
-    () => alerts.filter((alert) => alert.type === 'rendered_change'),
-    [alerts],
+    () => incidentAlerts.filter((alert) => alert.type === 'rendered_change'),
+    [incidentAlerts],
   )
 
   const activeRenderedChangeByWebsite = useMemo(() => {
@@ -1429,6 +1465,19 @@ export default function Dashboard() {
       showNotice('Could not queue a manual check right now.', 'error')
     } finally {
       setCheckingWebsiteId(null)
+    }
+  }
+
+  async function handleApproveTlsBaseline(website: Website) {
+    setApprovingTlsBaselineWebsiteId(website.id)
+    try {
+      await websitesApi.approveTlsBaseline(website.id)
+      showNotice(`Approved TLS baseline for ${website.name}.`)
+      await load()
+    } catch (error) {
+      showNotice(getRequestErrorMessage(error, 'Could not approve the TLS baseline right now.'), 'error')
+    } finally {
+      setApprovingTlsBaselineWebsiteId(null)
     }
   }
 
@@ -1665,7 +1714,7 @@ export default function Dashboard() {
               <h2 className="text-lg font-bold tracking-tight text-slate-950">Incident lifecycle</h2>
               <p className="mt-1 text-sm text-slate-500">Only active conditions stay visible here. Corrected issues drop out after the latest clean check.</p>
             </div>
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Based on the latest 50 alerts</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Based on the latest 50 incident alerts</div>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
@@ -1745,7 +1794,7 @@ export default function Dashboard() {
                   {topAlertMix ? (
                     <>
                       <div className="mt-2 text-base font-bold tracking-tight text-slate-950">{normalizeAlertType(topAlertMix[0])}</div>
-                      <div className="mt-1 text-xs text-slate-500">{topAlertMix[1]} of {alerts.length} recent alerts</div>
+                      <div className="mt-1 text-xs text-slate-500">{topAlertMix[1]} of {incidentAlerts.length} recent incident alerts</div>
                     </>
                   ) : (
                     <div className="mt-2 text-base font-bold tracking-tight text-slate-950">Quiet</div>
@@ -1913,6 +1962,7 @@ export default function Dashboard() {
                   const seoReport = latestCheck?.seo_report ?? null
                   const headerReport = latestCheck?.header_report ?? null
                   const tlsReport = latestCheck?.tls_report ?? null
+                  const tlsBaseline = website.tls_baseline
                   const noscriptReport = latestCheck?.noscript_report ?? null
                   const screenshotReport = latestCheck?.screenshot_report ?? null
                   const performanceReport = latestCheck?.performance_report ?? null
@@ -1927,6 +1977,16 @@ export default function Dashboard() {
                   const tlsHiddenSanCount = Math.max(0, tlsSanValues.length - tlsVisibleSanValues.length)
                   const formattedCertificateFingerprint = formatHexFingerprint(tlsReport?.certificate_sha256)
                   const publicKeyPinValue = tlsReport?.public_key_pin_sha256 ?? 'Unavailable'
+                  const formattedBaselineCertificateFingerprint = formatHexFingerprint(tlsBaseline?.certificate_sha256)
+                  const baselinePublicKeyPinValue = tlsBaseline?.public_key_pin_sha256 ?? 'Unavailable'
+                  const tlsNeedsApproval = Boolean(
+                    tlsReport?.valid && (
+                      tlsReport.baseline_pending_approval ||
+                      tlsReport.changed_certificate ||
+                      tlsReport.changed_public_key
+                    ),
+                  )
+                  const tlsApprovalLabel = tlsReport?.baseline_pending_approval ? 'Approve current baseline' : 'Accept current TLS baseline'
                   const noscriptIssueCount = noscriptReport?.issues.length ?? 0
                   const screenshotIssueCount = screenshotReport?.issues.length ?? 0
                   const performanceIssueCount = performanceReport?.issues.length ?? 0
@@ -2495,9 +2555,26 @@ export default function Dashboard() {
                             {showTlsPanel ? (
                               <div className="rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4">
                                 <div className="flex items-center justify-between gap-3">
-                                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">TLS identity</div>
-                                  <div className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${tlsStatusMeta.className}`}>
-                                    {tlsStatusMeta.label}
+                                  <div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">TLS identity</div>
+                                    <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                                      Review the live certificate, compare it with the approved baseline, and accept changes when they are expected.
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    <div className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${tlsStatusMeta.className}`}>
+                                      {tlsStatusMeta.label}
+                                    </div>
+                                    {tlsNeedsApproval ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleApproveTlsBaseline(website)}
+                                        disabled={approvingTlsBaselineWebsiteId === website.id}
+                                        className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-[11px] font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 hover:text-sky-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                      >
+                                        {approvingTlsBaselineWebsiteId === website.id ? 'Approving...' : tlsApprovalLabel}
+                                      </button>
+                                    ) : null}
                                   </div>
                                 </div>
 
@@ -2609,9 +2686,76 @@ export default function Dashboard() {
                                       </div>
                                     </div>
 
+                                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+                                      <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Approved TLS baseline</div>
+                                          <div className="mt-1 text-xs leading-5 text-slate-500">
+                                            {website.tls_baseline_approved_at
+                                              ? `Last approved ${formatAuditDateTime(website.tls_baseline_approved_at)}.`
+                                              : 'No trusted TLS baseline has been approved yet.'}
+                                          </div>
+                                        </div>
+                                        <span
+                                          className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                                            tlsBaseline
+                                              ? 'bg-emerald-100 text-emerald-700'
+                                              : 'bg-slate-200 text-slate-600'
+                                          }`}
+                                        >
+                                          {tlsBaseline ? 'Approved baseline' : 'Approval pending'}
+                                        </span>
+                                      </div>
+
+                                      {tlsBaseline ? (
+                                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                                            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Approved issuer</div>
+                                            <div className="mt-1 break-all text-xs leading-5 text-slate-600">{tlsBaseline.issuer ?? 'Unavailable'}</div>
+                                          </div>
+                                          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                                            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Approved host</div>
+                                            <div className="mt-1 break-all text-xs leading-5 text-slate-600">{tlsBaseline.hostname ?? 'Unavailable'}</div>
+                                          </div>
+                                          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Approved cert SHA-256</div>
+                                              <button
+                                                type="button"
+                                                onClick={() => void copyText(formattedBaselineCertificateFingerprint, 'Approved certificate fingerprint copied.')}
+                                                disabled={!tlsBaseline.certificate_sha256}
+                                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                              >
+                                                Copy
+                                              </button>
+                                            </div>
+                                            <div className="mt-1 break-all font-mono text-[11px] leading-5 text-slate-600">{formattedBaselineCertificateFingerprint}</div>
+                                          </div>
+                                          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">Approved public key pin</div>
+                                              <button
+                                                type="button"
+                                                onClick={() => void copyText(baselinePublicKeyPinValue, 'Approved public key pin copied.')}
+                                                disabled={!tlsBaseline.public_key_pin_sha256}
+                                                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                                              >
+                                                Copy
+                                              </button>
+                                            </div>
+                                            <div className="mt-1 break-all font-mono text-[11px] leading-5 text-slate-600">{baselinePublicKeyPinValue}</div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="mt-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3 text-xs leading-5 text-sky-800">
+                                          Review the current issuer, SANs and fingerprints, then approve this baseline to start trusted TLS identity change detection for future checks.
+                                        </div>
+                                      )}
+                                    </div>
+
                                     <div className="mt-3 flex flex-wrap gap-2">
                                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tlsReport.baseline_available ? 'bg-slate-100 text-slate-700' : 'bg-sky-100 text-sky-700'}`}>
-                                        {tlsReport.baseline_available ? 'Baseline available' : 'First trusted baseline'}
+                                        {tlsReport.baseline_available ? 'Baseline available' : 'Approval pending'}
                                       </span>
                                       {tlsReport.changed_certificate ? (
                                         <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Certificate fingerprint changed</span>
@@ -3108,40 +3252,63 @@ response.headers.set('X-Robots-Tag', 'index, follow');
       <section className="rounded-[30px] border border-slate-200/80 bg-white/92 p-6 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.18)]">
         <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-950">Active incident log</h2>
-            <p className="mt-1 text-sm text-slate-500">Only open or review items remain visible here. Corrected issues disappear after the latest clean check.</p>
+            <h2 className="text-xl font-bold tracking-tight text-slate-950">Incident timeline</h2>
+            <p className="mt-1 text-sm text-slate-500">Recent incidents, review items and operator approvals stay in one chronological stream.</p>
           </div>
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Latest 8 active alerts</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Latest 12 timeline events</div>
         </div>
         <div className="space-y-3">
-          {activeAlerts.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-500">No active incidents right now.</div>
+          {alerts.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-500">No timeline events yet. The first alert or operator approval will appear here.</div>
           ) : (
-            activeAlerts.slice(0, 8).map((alert) => {
+            alerts.slice(0, 12).map((alert) => {
               const websiteName = websiteNameById[alert.website_id] ?? `Website #${alert.website_id}`
               const lifecycle = alertLifecycleById[alert.id] ?? 'review'
               const severity = getAlertSeverity(alert)
+              const isIncident = isIncidentAlertType(alert.type)
+              const statusLabel = isIncident ? getLifecycleLabel(lifecycle) : 'Operator action'
+              const statusClasses = isIncident
+                ? getLifecycleClasses(lifecycle)
+                : 'border-sky-200 bg-sky-50 text-sky-700'
+              const timelineDotClass = !isIncident
+                ? 'bg-sky-500'
+                : lifecycle === 'open'
+                  ? 'bg-rose-500'
+                  : lifecycle === 'review'
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
 
               return (
                 <div key={alert.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 transition hover:border-slate-300 hover:bg-white">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-full ${timelineDotClass}`} aria-hidden="true" />
                         <div className="text-sm font-semibold text-slate-950">{normalizeAlertType(alert.type)}</div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getSeverityClasses(severity)}`}>
-                          {getSeverityLabel(severity)}
+                        {isIncident ? (
+                          <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getSeverityClasses(severity)}`}>
+                            {getSeverityLabel(severity)}
+                          </span>
+                        ) : null}
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${statusClasses}`}>
+                          {statusLabel}
                         </span>
-                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getLifecycleClasses(lifecycle)}`}>
-                          {getLifecycleLabel(lifecycle)}
-                        </span>
-                        <span className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">{websiteName}</span>
+                        <Link to={`/dashboard#monitor-${alert.website_id}`} className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400 transition hover:text-slate-600">
+                          {websiteName}
+                        </Link>
                       </div>
                       <div className="mt-1 text-sm text-slate-600">{formatAlertMessage(alert, websiteName)}</div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {lifecycle === 'open'
+                      {isIncident ? (
+                        <div className="mt-1 text-xs text-slate-500">
+                          {lifecycle === 'open'
                             ? 'Latest data still shows this condition.'
-                            : 'Latest change evidence still needs a human review.'}
-                      </div>
+                            : lifecycle === 'review'
+                              ? 'Latest change evidence still needs a human review.'
+                              : 'Latest clean data no longer shows this incident condition.'}
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-xs text-slate-500">Manual operator action recorded for this monitor.</div>
+                      )}
                     </div>
                     <div className="text-xs text-slate-400">{new Date(alert.sent_at).toLocaleString()}</div>
                   </div>

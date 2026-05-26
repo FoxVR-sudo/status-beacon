@@ -18,6 +18,8 @@ class Website(Base):
     basic_auth_password = Column(String, nullable=True)
     check_noscript = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     performance_budgets = Column(JSON, nullable=True)
+    tls_baseline = Column(JSON, nullable=True)
+    tls_baseline_approved_at = Column(DateTime(timezone=True), nullable=True)
     tags = Column(JSON, nullable=False, default=list, server_default=text("'[]'::json"))
     is_paused = Column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

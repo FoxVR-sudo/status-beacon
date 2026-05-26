@@ -8,6 +8,8 @@ export interface Website {
   has_basic_auth: boolean
   check_noscript: boolean
   performance_budgets: PerformanceBudgets | null
+  tls_baseline: TlsBaseline | null
+  tls_baseline_approved_at: string | null
   screenshot_current_preview: string | null
   screenshot_previous_preview: string | null
   screenshot_changed_at: string | null
@@ -64,6 +66,20 @@ export interface HeaderReport {
   issues: string[]
 }
 
+export interface TlsBaseline {
+  applicable: boolean
+  valid?: boolean
+  hostname?: string | null
+  subject?: string | null
+  issuer?: string | null
+  serial_number?: string | null
+  subject_alt_names?: string[]
+  certificate_sha256?: string | null
+  public_key_pin_sha256?: string | null
+  not_before?: string | null
+  not_after?: string | null
+}
+
 export interface TlsReport {
   applicable: boolean
   valid?: boolean
@@ -78,6 +94,8 @@ export interface TlsReport {
   not_after?: string | null
   days_left?: number | null
   baseline_available?: boolean
+  baseline_pending_approval?: boolean
+  baseline_approved_at?: string | null
   changed_certificate?: boolean
   changed_public_key?: boolean
   issues: string[]

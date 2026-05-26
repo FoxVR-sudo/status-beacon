@@ -1,6 +1,6 @@
 from pydantic import AnyHttpUrl, BaseModel, field_validator
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from app.schemas.traffic import WebsiteTrafficSnapshot
 from app.services.performance_budgets import PERFORMANCE_BUDGET_KEYS, effective_performance_budgets
@@ -153,6 +153,8 @@ class WebsiteResponse(WebsiteTrafficSnapshot):
     has_basic_auth: bool = False
     check_noscript: bool = False
     performance_budgets: Optional[dict[str, float]] = None
+    tls_baseline: Optional[dict[str, Any]] = None
+    tls_baseline_approved_at: Optional[datetime] = None
     screenshot_current_preview: Optional[str] = None
     screenshot_previous_preview: Optional[str] = None
     screenshot_changed_at: Optional[datetime] = None
