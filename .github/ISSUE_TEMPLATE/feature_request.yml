@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose an improvement or new capability for Status Beacon
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What operator pain or product gap does this address?
+      placeholder: Right now it is hard to...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you want.
+      placeholder: We should add...
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Intended workflow
+      description: How would a user move through this feature?
+      placeholder: In Dashboard, the operator would...
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: Another possible approach is...
+  - type: textarea
+    id: context
+    attributes:
+      label: Extra context
+      description: Mockups, similar products, screenshots, or links.

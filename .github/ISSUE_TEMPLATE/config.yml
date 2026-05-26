@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Local setup guide
+    url: https://github.com/FoxVR-sudo/status-beacon/blob/main/docs/setup.md
+    about: Read the setup guide before opening environment or onboarding issues.
